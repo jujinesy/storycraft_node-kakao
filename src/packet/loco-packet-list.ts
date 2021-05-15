@@ -14,7 +14,7 @@ import { PacketSyncJoinChannelRes } from "./packet-sync-join-channel";
 import { PacketGetMemberRes, PacketGetMemberReq } from "./packet-get-member";
 import { DefaultBsonRequestPacket, DefaultBsonResponsePacket } from "./loco-bson-packet";
 import { PacketGetMetaReq, PacketGetMetaRes, PacketGetMetaListReq, PacketGetMetaListRes } from "./packet-get-meta";
-import { PacketGetChannelBoardMetaReq, PacketGetMoimMetaRes } from "./packet-get-channel-board-meta";
+import { PacketGetChannelBoardMetaReq, PacketGetChannelBoardMetaRes } from "./packet-get-channel-board-meta";
 import { PacketSyncLinkReq, PacketSyncLinkRes } from "./packet-sync-link";
 import { PacketRewriteReq, PacketRewriteRes } from "./packet-rewrite";
 import { PacketKickMemberReq, PacketKickMemberRes } from "./packet-kick-member";
@@ -62,6 +62,8 @@ import { PacketReactionCountReq, PacketReactionCountRes } from "./packet-reactio
 import { PacketReactRes, PacketReactReq } from "./packet-react";
 import { PacketSyncRewriteRes } from "./packet-sync-rewrite";
 import { PacketLinkDeletedRes } from "./packet-link-deleted";
+import { PacketAddMemberReq, PacketAddMemberRes } from "./packet-add-member";
+import { PacketRelayEventReq, PacketRelayEventRes } from "./packet-relay-event";
 
 
 /*
@@ -99,6 +101,8 @@ export namespace LocoPacketList {
         requestPacketMap.set('MEMBER', PacketChatMemberReq);
         requestPacketMap.set('CHATINFO', PacketChannelInfoReq);
 
+        requestPacketMap.set('ADDMEM', PacketAddMemberReq);
+
         requestPacketMap.set('UPDATECHAT', PacketUpdateChannelReq);
 
         requestPacketMap.set('GETTRAILER', PacketGetTrailerReq);
@@ -108,6 +112,8 @@ export namespace LocoPacketList {
 
         requestPacketMap.set('MINI', PacketMiniReq);
         requestPacketMap.set('DOWN', PacketDownReq);
+
+        requestPacketMap.set('RELAYEVENT', PacketRelayEventReq);
 
         requestPacketMap.set('GETMETA', PacketGetMetaReq);
         requestPacketMap.set('GETMCMETA', PacketGetClientMetaReq);
@@ -182,12 +188,16 @@ export namespace LocoPacketList {
         responsePacketMap.set('MINI', PacketMiniRes);
         responsePacketMap.set('DOWN', PacketDownRes);
 
+        responsePacketMap.set('RELAYEVENT', PacketRelayEventRes);
+
         responsePacketMap.set('COMPLETE', PacketCompleteRes);
 
         responsePacketMap.set('NOTIREAD', PacketMessageNotiReadRes);
         responsePacketMap.set('DECUNREAD', PacketMessageReadRes);
         responsePacketMap.set('MEMBER', PacketChatMemberRes);
         responsePacketMap.set('CHATINFO', PacketChannelInfoRes);
+
+        responsePacketMap.set('ADDMEM', PacketAddMemberRes);
 
         responsePacketMap.set('UPDATECHAT', PacketUpdateChannelRes);
 
@@ -199,7 +209,7 @@ export namespace LocoPacketList {
         responsePacketMap.set('CHGMETA', PacketMetaChangeRes);
         responsePacketMap.set('GETMEM', PacketGetMemberRes);
         responsePacketMap.set('MEMBER', PacketMemberRes);
-        responsePacketMap.set('GETMOMETA', PacketGetMoimMetaRes);
+        responsePacketMap.set('GETMOMETA', PacketGetChannelBoardMetaRes);
 
         responsePacketMap.set('JOININFO', PacketJoinInfoRes);
 

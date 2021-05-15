@@ -298,10 +298,11 @@ export class MultiPhotoChat extends PhotoChat {
                 attachmentJson['wl'][i],
                 attachmentJson['hl'][i],
                 attachmentJson['imageUrls'][i],
+                attachmentJson['sl'][i],
+                attachmentJson['mtl'][i],
                 attachmentJson['thumbnailUrls'][i],
                 attachmentJson['thumbnailWidths'][i],
-                attachmentJson['thumbnailHeights'][i],
-                attachmentJson['sl'][i]
+                attachmentJson['thumbnailHeights'][i]
             );
 
             attachmentList.push(photoAttachment);
@@ -334,6 +335,21 @@ export class StaticEmoticonChat extends EmoticonChat {
 }
 
 export class AnimatedEmoticonChat extends EmoticonChat {
+    
+    get Type() {
+        return ChatType.StickerAni;
+    }
+
+    protected readAttachment(attachmentJson: any, attachmentList: ChatAttachment[]) {
+        let attachment = new EmoticonAttachment();
+        attachment.readAttachment(attachmentJson);
+
+        attachmentList.push(attachment);
+    }
+
+}
+
+export class GifEmoticonChat extends EmoticonChat {
     
     get Type() {
         return ChatType.StickerAni;
@@ -483,6 +499,7 @@ export namespace TypeMap {
     typeMap.set(ChatType.Video, VideoChat);
     typeMap.set(ChatType.Sticker, StaticEmoticonChat);
     typeMap.set(ChatType.StickerAni, AnimatedEmoticonChat);
+    typeMap.set(ChatType.StickerGif, GifEmoticonChat);
     typeMap.set(ChatType.Search, SharpSearchChat);
     typeMap.set(ChatType.Map, MapChat);
     typeMap.set(ChatType.Reply, ReplyChat);
