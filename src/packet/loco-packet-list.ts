@@ -64,6 +64,10 @@ import { PacketSyncRewriteRes } from "./packet-sync-rewrite";
 import { PacketLinkDeletedRes } from "./packet-link-deleted";
 import { PacketAddMemberReq, PacketAddMemberRes } from "./packet-add-member";
 import { PacketRelayEventReq, PacketRelayEventRes } from "./packet-relay-event";
+import { PacketKickLeaveRes, PacketKickLeaveReq } from "./packet-kick-leave";
+import { PacketMultiPostReq, PacketMultiPostRes } from "./media/packet-multi-post";
+import { PacketMultiShipReq, PacketMultiShipRes } from "./packet-multi-ship";
+import { PacketForwardReq, PacketForwardRes } from "./packet-forward";
 
 
 /*
@@ -98,6 +102,7 @@ export namespace LocoPacketList {
         requestPacketMap.set('MCHATLOGS', PacketMultiChatlogReq);
 
         requestPacketMap.set('WRITE', PacketMessageWriteReq);
+        requestPacketMap.set('FORWARD', PacketForwardReq);
         requestPacketMap.set('MEMBER', PacketChatMemberReq);
         requestPacketMap.set('CHATINFO', PacketChannelInfoReq);
 
@@ -109,6 +114,8 @@ export namespace LocoPacketList {
 
         requestPacketMap.set('SHIP', PacketShipReq);
         requestPacketMap.set('POST', PacketPostReq);
+        requestPacketMap.set('MSHIP', PacketMultiShipReq);
+        requestPacketMap.set('MPOST', PacketMultiPostReq);
 
         requestPacketMap.set('MINI', PacketMiniReq);
         requestPacketMap.set('DOWN', PacketDownReq);
@@ -153,6 +160,7 @@ export namespace LocoPacketList {
         requestPacketMap.set('PING', PacketPingReq);
 
         requestPacketMap.set('LEAVE', PacketLeaveReq);
+        requestPacketMap.set('KICKLEAVE', PacketKickLeaveReq);
 
         requestPacketMap.set('CREATELINK', PacketCreateOpenLinkReq);
         requestPacketMap.set('UPDATELINK', PacketUpdateOpenLinkReq);
@@ -179,11 +187,14 @@ export namespace LocoPacketList {
 
         responsePacketMap.set('MSG', PacketMessageRes);
         responsePacketMap.set('WRITE', PacketMessageWriteRes);
+        responsePacketMap.set('FORWARD', PacketForwardRes);
 
         responsePacketMap.set('GETTRAILER', PacketGetTrailerRes);
 
         responsePacketMap.set('SHIP', PacketShipRes);
         responsePacketMap.set('POST', PacketPostRes);
+        responsePacketMap.set('MSHIP', PacketMultiShipRes);
+        responsePacketMap.set('MPOST', PacketMultiPostRes);
 
         responsePacketMap.set('MINI', PacketMiniRes);
         responsePacketMap.set('DOWN', PacketDownRes);
@@ -220,6 +231,7 @@ export namespace LocoPacketList {
         responsePacketMap.set('NEWMEM', PacketNewMemberRes);
         responsePacketMap.set('LEFT', PacketLeftRes);
         responsePacketMap.set('LEAVE', PacketLeaveRes);
+        responsePacketMap.set('KICKLEAVE', PacketKickLeaveRes);
         responsePacketMap.set('SYNCJOIN', PacketSyncJoinChannelRes);
 
         responsePacketMap.set('SYNCLINK', PacketSyncLinkRes);
