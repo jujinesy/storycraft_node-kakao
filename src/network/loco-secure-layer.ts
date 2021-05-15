@@ -6,7 +6,7 @@
 
 import { CryptoStore } from '../crypto';
 import { ChunkedArrayBufferList } from './chunk';
-import { BiStream } from '../stream';
+import { BiStream, ReadStreamUtil } from '../stream';
 
 /**
  * Loco secure layer that encrypt outgoing packets
@@ -17,76 +17,41 @@ export class LocoSecureLayer implements BiStream {
 
   private _handshaked: boolean;
 
+  private _dataChunks: ChunkedArrayBufferList;
+
   constructor(socket: BiStream, crypto: CryptoStore) {
     this._stream = socket;
     this._crypto = crypto;
 
     this._handshaked = false;
+    this._dataChunks = new ChunkedArrayBufferList();
   }
 
-  iterate(): AsyncIterableIterator<Uint8Array> {
-    const stream = this._stream;
-    const crypto = this._crypto;
-    const iterator = stream.iterate();
+  async read(buffer: Uint8Array): Promise<number | null> {
+    if (this._dataChunks.byteLength <= 0) {
+      const headerBuffer = await ReadStreamUtil.exact(this._stream, 20);
+      if (!headerBuffer) return null;
+      const dataSize = new DataView(headerBuffer.buffer).getUint32(0, true) - 16;
+      const iv = headerBuffer.subarray(4, 20);
+  
+      const encryptedData = await ReadStreamUtil.exact(this._stream, dataSize);
+      if (!encryptedData) return null;
+  
+      this._dataChunks.append(this._crypto.toAESDecrypted(encryptedData, iv));
+    }
 
-    const headerBufferList = new ChunkedArrayBufferList();
-    const packetBufferList = new ChunkedArrayBufferList();
+    const data = this._dataChunks.toBuffer();
+    this._dataChunks.clear();
+    
+    const readSize = Math.min(data.byteLength, buffer.byteLength);
 
-    return {
-      [Symbol.asyncIterator]() {
-        return this;
-      },
+    buffer.set(data.subarray(0, readSize), 0);
 
-      async next(): Promise<IteratorResult<Uint8Array>> {
-        if (stream.ended) {
-          return { done: true, value: null };
-        }
+    if (data.byteLength > buffer.byteLength) {
+      this._dataChunks.append(data.subarray(buffer.byteLength));
+    }
 
-        if (headerBufferList.byteLength < 20) {
-          for await (const data of iterator) {
-            headerBufferList.append(data);
-
-            if (headerBufferList.byteLength >= 20) break;
-          }
-
-          if (stream.ended) {
-            return { done: true, value: null };
-          }
-        }
-
-        const headerBuffer = headerBufferList.toBuffer();
-        const headerArray = new Uint8Array(headerBuffer);
-
-        const dataSize = new DataView(headerBuffer).getUint32(0, true) - 16;
-        const iv = headerArray.slice(4, 20);
-
-        if (headerBuffer.byteLength > 20) {
-          packetBufferList.append(headerArray.slice(20));
-        }
-        headerBufferList.clear();
-
-        if (packetBufferList.byteLength < dataSize) {
-          for await (const data of iterator) {
-            packetBufferList.append(data);
-
-            if (packetBufferList.byteLength >= dataSize) break;
-          }
-
-          if (stream.ended && packetBufferList.byteLength < dataSize) {
-            return { done: true, value: null };
-          }
-        }
-
-        const dataBuffer = packetBufferList.toBuffer();
-        const data = new Uint8Array(dataBuffer);
-        if (dataBuffer.byteLength > dataSize) {
-          headerBufferList.append(dataBuffer.slice(dataSize));
-        }
-        packetBufferList.clear();
-
-        return { done: false, value: crypto.toAESDecrypted(data.slice(0, dataSize), iv) };
-      },
-    };
+    return readSize;
   }
 
   get ended(): boolean {
@@ -111,7 +76,7 @@ export class LocoSecureLayer implements BiStream {
     return this._handshaked;
   }
 
-  async write(data: Uint8Array): Promise<void> {
+  async write(data: Uint8Array): Promise<number> {
     if (!this._handshaked) {
       await this.sendHandshake();
       this._handshaked = true;

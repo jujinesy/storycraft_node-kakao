@@ -7,10 +7,14 @@
 export * from './common';
 export * from './talk-channel-handler';
 export * from './talk-channel-session';
+export * from './talk-channel-data-session';
+export * from './talk-normal-channel-session';
+export * from './talk-normal-channel-handler';
 export * from './talk-normal-channel';
 export * from './talk-normal-channel-list';
+export * from './talk-normal-channel-data-session';
 
-import { Channel, ChannelData, ChannelSession } from '../../channel';
+import { Channel, ChannelDataStore, ChannelInfo, ChannelSession, UpdatableChannelDataStore } from '../../channel';
 import { ChannelUser, ChannelUserInfo } from '../../user';
 import { AsyncCommandResult } from '../../request';
 import { TypedEmitter } from '../../event';
@@ -23,13 +27,20 @@ import {
   TvLiveMetaContent,
   TvMetaContent,
 } from '../../channel/meta';
-import { Chatlog, ChatLogged, ChatType } from '../../chat';
+import { Chatlog, ChatLogged, ChatType, UpdatableChatListStore } from '../../chat';
 import { MediaUploadTemplate } from '../media';
+
+type TalkChannelEvents = ChannelEvents<TalkChannel, ChannelUserInfo>
 
 /**
  * TalkChannel interface includes managed methods and other methods that make it easier to use
  */
-export interface TalkChannel extends Channel, ChannelData, ChannelSession, TypedEmitter<ChannelEvents> {
+export interface TalkChannel
+extends Channel, ChannelDataStore<ChannelInfo, ChannelUserInfo>, ChannelSession, TypedEmitter<TalkChannelEvents> {
+
+  readonly chatListStore: UpdatableChatListStore;
+
+  readonly store: UpdatableChannelDataStore<ChannelInfo, ChannelUserInfo>;
 
   /**
    * Get client user

@@ -8,47 +8,49 @@ import { BiStream } from '../../stream';
 import * as net from 'net';
 import * as tls from 'tls';
 import { NetSocketOptions } from '.';
+import { PromiseSocket } from 'promise-socket';
+import { ChunkedArrayBufferList } from '../chunk';
 
 export class NodeSocket implements BiStream {
-  private _socket: net.Socket;
+  private _socket: PromiseSocket<net.Socket>;
   private _ended: boolean;
 
+  private _chunks: ChunkedArrayBufferList;
+
   private constructor(socket: net.Socket) {
-    this._socket = socket;
+    this._socket = new PromiseSocket(socket);
     this._ended = false;
+
+    this._chunks = new ChunkedArrayBufferList();
   }
 
-  iterate(): AsyncIterableIterator<Uint8Array> {
-    const iterator = this._socket[Symbol.asyncIterator]();
+  async read(buffer: Uint8Array): Promise<number | null> {
+    if (this._chunks.byteLength < buffer.byteLength) {
+      const chunk = await this._socket.read() as Buffer | undefined;
+      if (!chunk) return null;
+      this._chunks.append(chunk);
+    }
 
-    return {
-      [Symbol.asyncIterator]() {
-        return this;
-      },
+    const data = this._chunks.toBuffer();
+    this._chunks.clear();
 
-      next: async () => {
-        const next = await iterator.next();
-        if (next.done) this._ended = true;
+    let view = data;
+    if (data.byteLength > buffer.byteLength) {
+      this._chunks.append(data.subarray(buffer.byteLength));
+      view = data.subarray(0, buffer.byteLength);
+    }
+    
+    buffer.set(view, 0);
 
-        return next;
-      },
-    };
+    return view.byteLength;
   }
 
   get ended(): boolean {
     return this._ended;
   }
 
-  write(data: Uint8Array): Promise<void> {
-    if (this._ended) throw new Error('Tried to send data from closed socket');
-
-    return new Promise(
-      (resolve, reject) => this._socket.write(
-        new Uint8Array(data),
-        (err) => {
-          if (err) reject(err); else resolve();
-        })
-      );
+  write(data: Uint8Array): Promise<number> {
+    return this._socket.write(Buffer.from(data));
   }
 
   close(): void {

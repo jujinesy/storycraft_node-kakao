@@ -5,20 +5,23 @@
  */
 
 import { AsyncCommandResult, CommandResult, DefaultRes } from '../../request';
-import { Channel, NormalChannelData, ChannelMeta, NormalChannelInfo, SetChannelMeta } from '../../channel';
-import { ChannelUser, NormalChannelUserInfo } from '../../user';
-import { Chat, Chatlog, ChatLogged, ChatType } from '../../chat';
-import { TalkChannelSession } from './talk-channel-session';
 import {
-  NormalMemberStruct,
-  structToChannelUserInfo,
-} from '../../packet/struct';
+  Channel,
+  ChannelDataStore,
+  ChannelMeta,
+  NormalChannelInfo,
+  SetChannelMeta,
+  UpdatableChannelDataStore
+} from '../../channel';
+import { ChannelUser, NormalChannelUserInfo } from '../../user';
+import { Chat, Chatlog, ChatLogged, ChatType, UpdatableChatListStore } from '../../chat';
+import { TalkNormalChannelSession } from './talk-normal-channel-session';
 import { Managed } from '../managed';
 import { EventContext, TypedEmitter } from '../../event';
 import { TalkChannelHandler } from './talk-channel-handler';
 import { Long } from 'bson';
 import { TalkSession } from '../client';
-import { MediaKeyComponent } from '../../media';
+import { MediaKeyComponent, MediaMultiPost, MediaPost, MediaUploadForm } from '../../media';
 import { ChannelEvents } from '../event';
 import { TalkChannel } from '.';
 import {
@@ -34,111 +37,103 @@ import {
 import { JsonUtil } from '../../util';
 import { ChatOnRoomRes } from '../../packet/chat';
 import { MediaUploadTemplate } from '../media/upload';
-import { initWatermarkMap, initNormalUserList, sendMultiMedia } from './common';
-import { MediaDownloader, MediaUploader, MultiMediaUploader } from '../media';
+import { TalkNormalChannelDataSession } from './talk-normal-channel-data-session';
+import { TalkChannelDataSession } from './talk-channel-data-session';
+import { TalkChannelSession } from './talk-channel-session';
+import { TalkNormalChannelHandler } from './talk-normal-channel-handler';
+import { FixedReadStream } from '../../stream';
+import { sendMedia, sendMultiMedia } from './common';
 
-export class TalkNormalChannel extends TypedEmitter<ChannelEvents>
-  implements TalkChannel, NormalChannelData, Managed<ChannelEvents> {
-  private _info: NormalChannelInfo;
+type TalkChannelEvents = ChannelEvents<TalkNormalChannel, NormalChannelUserInfo>;
 
-  private _channelSession: TalkChannelSession;
-  private _handler: TalkChannelHandler;
+export class TalkNormalChannel extends TypedEmitter<TalkChannelEvents>
+  implements TalkChannel,
+  ChannelDataStore<NormalChannelInfo, NormalChannelUserInfo>,
+  Managed<TalkChannelEvents> {
+
+  private _channelSession: TalkChannelDataSession;
+  private _normalChannelSession: TalkNormalChannelDataSession;
+
+  private _normalHandler: TalkNormalChannelHandler<TalkNormalChannel>;
+  private _handler: TalkChannelHandler<TalkNormalChannel>;
 
   constructor(
     private _channel: Channel,
     session: TalkSession,
-    info: Partial<NormalChannelInfo> = {},
-    private _userInfoMap: Map<string, NormalChannelUserInfo> = new Map(),
-    private _watermarkMap: Map<string, Long> = new Map(),
+    store: UpdatableChannelDataStore<NormalChannelInfo, NormalChannelUserInfo>,
+    private _chatListStore: UpdatableChatListStore
   ) {
     super();
 
-    this._channelSession = new TalkChannelSession(this, session);
-    this._handler = new TalkChannelHandler(this, {
-      updateInfo: (info) => this._info = { ...this._info, ...info },
+    this._channelSession = new TalkChannelDataSession(
+      session.clientUser,
+      new TalkChannelSession(this, session),
+      store,
+      _chatListStore
+    );
+    this._normalChannelSession = new TalkNormalChannelDataSession(
+      session.clientUser,
+      new TalkNormalChannelSession(this, session),
+      store
+    );
 
-      updateUserInfo: (user, info) => {
-        const strId = user.userId.toString();
-
-        if (!info) {
-          this._userInfoMap.delete(strId);
-        } else {
-          const lastInfo = this._userInfoMap.get(strId);
-
-          if (lastInfo) {
-            this._userInfoMap.set(strId, { ...lastInfo, ...info });
-          }
-        }
-      },
-
-      addUsers: (...user) => this.getLatestUserInfo(...user),
-
-      updateWatermark: (readerId, watermark) => this._watermarkMap.set(readerId.toString(), watermark),
-    });
-
-    this._info = NormalChannelInfo.createPartial(info);
+    this._handler = new TalkChannelHandler(this, this, store, _chatListStore);
+    this._normalHandler = new TalkNormalChannelHandler(
+      this,
+      this._normalChannelSession,
+      this,
+      store,
+      _chatListStore
+    );
   }
 
-
   get clientUser(): Readonly<ChannelUser> {
-    return this._channelSession.session.clientUser;
+    return this._normalChannelSession.clientUser;
   }
 
   get channelId(): Long {
     return this._channel.channelId;
   }
 
+  get chatListStore(): UpdatableChatListStore {
+    return this._chatListStore;
+  }
+
+  get store(): UpdatableChannelDataStore<NormalChannelInfo, NormalChannelUserInfo> {
+    return this._normalChannelSession.store;
+  }
+
   get info(): Readonly<NormalChannelInfo> {
-    return this._info;
+    return this.store.info;
   }
 
   get userCount(): number {
-    return this._userInfoMap.size;
+    return this.store.userCount;
   }
 
   getName(): string {
-    const nameMeta = this._info.metaMap[KnownChannelMetaType.TITLE];
+    const nameMeta = this.info.metaMap[KnownChannelMetaType.TITLE];
     return nameMeta && nameMeta.content || '';
   }
 
   getDisplayName(): string {
-    return this.getName() || this._info.displayUserList.map((user) => user.nickname).join(', ');
+    return this.getName() || this.info.displayUserList.map((user) => user.nickname).join(', ');
   }
 
   getUserInfo(user: ChannelUser): Readonly<NormalChannelUserInfo> | undefined {
-    return this._userInfoMap.get(user.userId.toString());
+    return this._normalChannelSession.store.getUserInfo(user);
   }
 
   getAllUserInfo(): IterableIterator<NormalChannelUserInfo> {
-    return this._userInfoMap.values();
+    return this._normalChannelSession.store.getAllUserInfo();
   }
 
   getReadCount(chat: ChatLogged): number {
-    let count = 0;
-
-    if (this.userCount >= 100) return 0;
-
-    for (const [strId] of this._userInfoMap) {
-      const watermark = this._watermarkMap.get(strId);
-
-      if (!watermark || watermark && watermark.greaterThanOrEqual(chat.logId)) count++;
-    }
-
-    return count;
+    return this.store.getReadCount(chat);
   }
 
   getReaders(chat: ChatLogged): Readonly<NormalChannelUserInfo>[] {
-    const list: NormalChannelUserInfo[] = [];
-
-    if (this.userCount >= 100) return [];
-
-    for (const [strId, userInfo] of this._userInfoMap) {
-      const watermark = this._watermarkMap.get(strId);
-
-      if (watermark && watermark.greaterThanOrEqual(chat.logId)) list.push(userInfo);
-    }
-
-    return list;
+    return this.store.getReaders(chat);
   }
 
   sendChat(chat: string | Chat): AsyncCommandResult<Chatlog> {
@@ -149,80 +144,56 @@ export class TalkNormalChannel extends TypedEmitter<ChannelEvents>
     return this._channelSession.forwardChat(chat);
   }
 
-  deleteChat(chat: ChatLogged): Promise<{ success: boolean, status: number }> {
+  deleteChat(chat: ChatLogged): AsyncCommandResult {
     return this._channelSession.deleteChat(chat);
   }
 
-  async markRead(chat: ChatLogged): Promise<{ success: boolean, status: number }> {
-    const res = await this._channelSession.markRead(chat);
-
-    if (res.success) {
-      this._watermarkMap.set(this.clientUser.userId.toString(), chat.logId);
-    }
-
-    return res;
+  markRead(chat: ChatLogged): AsyncCommandResult {
+    return this._channelSession.markRead(chat);
   }
 
-  async setMeta(type: ChannelMetaType, meta: ChannelMeta | string): Promise<CommandResult<SetChannelMeta>> {
-    const res = await this._channelSession.setMeta(type, meta);
-
-    if (res.success) {
-      this._info.metaMap[type] = res.result;
-    }
-
-    return res;
+  setMeta(type: ChannelMetaType, meta: ChannelMeta | string): AsyncCommandResult<SetChannelMeta> {
+    return this._channelSession.setMeta(type, meta);
   }
 
-  async setTitleMeta(title: string): Promise<CommandResult<SetChannelMeta>> {
+  setTitleMeta(title: string): AsyncCommandResult<SetChannelMeta> {
     return this.setMeta(KnownChannelMetaType.TITLE, title);
   }
 
-  async setNoticeMeta(notice: string): Promise<CommandResult<SetChannelMeta>> {
+  setNoticeMeta(notice: string): AsyncCommandResult<SetChannelMeta> {
     return this.setMeta(KnownChannelMetaType.NOTICE, notice);
   }
 
-  async setProfileMeta(content: ProfileMetaContent): Promise<CommandResult<SetChannelMeta>> {
+  setProfileMeta(content: ProfileMetaContent): AsyncCommandResult<SetChannelMeta> {
     return this.setMeta(KnownChannelMetaType.PROFILE, JsonUtil.stringifyLoseless(content));
   }
 
-  async setTvMeta(content: TvMetaContent): Promise<CommandResult<SetChannelMeta>> {
+  setTvMeta(content: TvMetaContent): AsyncCommandResult<SetChannelMeta> {
     return this.setMeta(KnownChannelMetaType.TV, JsonUtil.stringifyLoseless(content));
   }
 
-  async setTvLiveMeta(content: TvLiveMetaContent): Promise<CommandResult<SetChannelMeta>> {
+  setTvLiveMeta(content: TvLiveMetaContent): AsyncCommandResult<SetChannelMeta> {
     return this.setMeta(KnownChannelMetaType.TV_LIVE, JsonUtil.stringifyLoseless(content));
   }
 
-  async setLiveTalkInfoMeta(content: LiveTalkInfoMetaContent): Promise<CommandResult<SetChannelMeta>> {
+  setLiveTalkInfoMeta(content: LiveTalkInfoMetaContent): AsyncCommandResult<SetChannelMeta> {
     return this.setMeta(KnownChannelMetaType.LIVE_TALK_INFO, JsonUtil.stringifyLoseless(content));
   }
 
-  async setLiveTalkCountMeta(content: LiveTalkCountMetaContent): Promise<CommandResult<SetChannelMeta>> {
+  setLiveTalkCountMeta(content: LiveTalkCountMetaContent): AsyncCommandResult<SetChannelMeta> {
     return this.setMeta(KnownChannelMetaType.LIVE_TALK_COUNT, JsonUtil.stringifyLoseless(content));
   }
 
-  async setGroupMeta(content: GroupMetaContent): Promise<CommandResult<SetChannelMeta>> {
+  setGroupMeta(content: GroupMetaContent): AsyncCommandResult<SetChannelMeta> {
     return this.setMeta(KnownChannelMetaType.GROUP, JsonUtil.stringifyLoseless(content));
   }
 
-  async setPushAlert(flag: boolean): Promise<CommandResult> {
-    const res = await this._channelSession.setPushAlert(flag);
-
-    if (res.success) {
-      this._info = { ...this._info, pushAlert: flag };
-    }
-
-    return res;
+  setPushAlert(flag: boolean): AsyncCommandResult {
+    return this._channelSession.setPushAlert(flag);
   }
 
-  async inviteUsers(users: ChannelUser[]): Promise<CommandResult> {
-    const res = await this._channelSession.inviteUsers(users);
-
-    if (res.success) {
-      await this.getLatestUserInfo(...users);
-    }
-
-    return res;
+  inviteUsers(users: ChannelUser[]): AsyncCommandResult {
+    return this._normalChannelSession.inviteUsers(users);
   }
 
   syncChatList(endLogId: Long, startLogId?: Long): AsyncIterableIterator<CommandResult<Chatlog[]>> {
@@ -234,109 +205,42 @@ export class TalkNormalChannel extends TypedEmitter<ChannelEvents>
   }
 
   async chatON(): AsyncCommandResult<ChatOnRoomRes> {
-    const res = await this._channelSession.chatON();
-
-    if (res.success) {
-      const { result } = res;
-
-      if (this._info.type !== result.t || this._info.lastChatLogId !== result.l) {
-        this._info = { ...this._info, type: result.t, lastChatLogId: result.l };
-      }
-
-      if (result.a && result.w) {
-        this._watermarkMap = initWatermarkMap(result.a, result.w);
-      }
-
-      const userInfoMap = new Map();
-      if (result.m) {
-        const structList = result.m as NormalMemberStruct[];
-
-        for (const struct of structList) {
-          const wrapped = structToChannelUserInfo(struct);
-          userInfoMap.set(wrapped.userId.toString(), wrapped);
-        }
-      } else if (result.mi) {
-        const userInitres = await initNormalUserList(this._channelSession, result.mi);
-  
-        if (!userInitres.success) return userInitres;
-  
-        for (const info of userInitres.result) {
-          userInfoMap.set(info.userId.toString(), info);
-        }
-
-        const channelSession = this._channelSession;
-        const clientUser = channelSession.session.clientUser;
-        if (!userInfoMap.has(clientUser.userId.toString())) {
-          const clientRes = await channelSession.getLatestUserInfo(clientUser);
-          if (!clientRes.success) return clientRes;
-  
-          for (const user of clientRes.result) {
-            userInfoMap.set(user.userId.toString(), user);
-          }
-        }
-      }
-
-      if (userInfoMap.size > 0) this._userInfoMap = userInfoMap;
-    }
-
-    return res;
+    return this._normalChannelSession.chatON();
   }
 
-  async getLatestChannelInfo(): Promise<CommandResult<NormalChannelInfo>> {
-    const infoRes = await this._channelSession.getLatestChannelInfo();
-
-    if (infoRes.success) {
-      this._info = NormalChannelInfo.createPartial(infoRes.result);
-    }
-
-    return infoRes;
+  async getLatestChannelInfo(): AsyncCommandResult<NormalChannelInfo> {
+    return this._normalChannelSession.getLatestChannelInfo();
   }
 
-  async getLatestUserInfo(...users: ChannelUser[]): Promise<CommandResult<NormalChannelUserInfo[]>> {
-    const infoRes = await this._channelSession.getLatestUserInfo(...users);
-
-    if (infoRes.success) {
-      const result = infoRes.result as NormalChannelUserInfo[];
-
-      result.forEach((info) => this._userInfoMap.set(info.userId.toString(), info));
-    }
-
-    return infoRes;
+  async getLatestUserInfo(...users: ChannelUser[]): AsyncCommandResult<NormalChannelUserInfo[]> {
+    return this._normalChannelSession.getLatestUserInfo(...users);
   }
 
-  async getAllLatestUserInfo(): Promise<CommandResult<NormalChannelUserInfo[]>> {
-    const infoRes = await this._channelSession.getAllLatestUserInfo();
-
-    if (infoRes.success) {
-      const userInfoMap = new Map();
-      infoRes.result.map((info) => userInfoMap.set(info.userId.toString(), info));
-
-      this._userInfoMap = userInfoMap;
-    }
-
-    return infoRes;
+  async getAllLatestUserInfo(): AsyncCommandResult<NormalChannelUserInfo[]> {
+    return this._normalChannelSession.getAllLatestUserInfo();
   }
 
-  downloadMedia(media: MediaKeyComponent, type: ChatType): AsyncCommandResult<MediaDownloader> {
-    return this._channelSession.downloadMedia(media, type);
+  downloadMedia(media: MediaKeyComponent, type: ChatType, offset?: number): AsyncCommandResult<FixedReadStream> {
+    return this._channelSession.downloadMedia(media, type, offset);
   }
 
-  uploadMedia(type: ChatType, template: MediaUploadTemplate): AsyncCommandResult<MediaUploader> {
-    return this._channelSession.uploadMedia(type, template);
+  downloadMediaThumb(media: MediaKeyComponent, type: ChatType, offset?: number): AsyncCommandResult<FixedReadStream> {
+    return this._channelSession.downloadMediaThumb(media, type, offset);
   }
 
-  uploadMultiMedia(type: ChatType, templates: MediaUploadTemplate[]): AsyncCommandResult<MultiMediaUploader[]> {
-    return this._channelSession.uploadMultiMedia(type, templates);
+  uploadMedia(type: ChatType, form: MediaUploadForm): AsyncCommandResult<MediaPost> {
+    return this._channelSession.uploadMedia(type, form);
   }
 
-  async sendMedia(type: ChatType, template: MediaUploadTemplate): AsyncCommandResult<Chatlog> {
-    const res = await this._channelSession.uploadMedia(type, template);
-    if (!res.success) return res;
-
-    return res.result.upload();
+  uploadMultiMedia(type: ChatType, forms: MediaUploadForm[]): AsyncCommandResult<MediaMultiPost> {
+    return this._channelSession.uploadMultiMedia(type, forms);
   }
 
-  async sendMultiMedia(type: ChatType, templates: MediaUploadTemplate[]): AsyncCommandResult<Chatlog> {
+  sendMedia(type: ChatType, template: MediaUploadTemplate): AsyncCommandResult<Chatlog> {
+    return sendMedia(this._channelSession, type, template);
+  }
+
+  sendMultiMedia(type: ChatType, templates: MediaUploadTemplate[]): AsyncCommandResult<Chatlog> {
     return sendMultiMedia(this._channelSession, type, templates);
   }
 
@@ -347,7 +251,8 @@ export class TalkNormalChannel extends TypedEmitter<ChannelEvents>
     return this.chatON();
   }
 
-  pushReceived(method: string, data: DefaultRes, parentCtx: EventContext<ChannelEvents>): void {
+  pushReceived(method: string, data: DefaultRes, parentCtx: EventContext<TalkChannelEvents>): void {
     this._handler.pushReceived(method, data, parentCtx);
+    this._normalHandler.pushReceived(method, data, parentCtx);
   }
 }

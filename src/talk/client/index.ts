@@ -4,8 +4,8 @@
  * Copyright (c) storycraft. Licensed under the MIT Licence.
  */
 
-import { CommandSession, LocoSession, SessionFactory } from '../../network';
-import { ChannelUser } from '../../user';
+import { CommandSession, ConnectionSession, SessionFactory } from '../../network';
+import { ChannelUser, ChannelUserInfo } from '../../user';
 import { AsyncCommandResult, DefaultReq, DefaultRes } from '../../request';
 import { Managed } from '../managed';
 import { OAuthCredential } from '../../oauth';
@@ -20,6 +20,9 @@ import { TalkChannelList } from '../talk-channel-list';
 import { ClientEvents } from '../event';
 import { Long } from 'bson';
 import { TalkBlockSession } from '../block';
+import { TalkChannel } from '../channel';
+import { ClientDataLoader } from '../../loader';
+import { TalkInMemoryDataLoader } from '../loader';
 
 export * from './talk-client-session';
 
@@ -34,12 +37,14 @@ export interface TalkSession extends CommandSession {
 
 }
 
+type TalkClientEvents = ClientEvents<TalkChannel, ChannelUserInfo>;
+
 /**
  * Simple client implementation.
  */
 export class TalkClient
-  extends TypedEmitter<ClientEvents> implements CommandSession, ClientSession, Managed<ClientEvents> {
-  private _session: LocoSession | null;
+  extends TypedEmitter<TalkClientEvents> implements CommandSession, ClientSession, Managed<TalkClientEvents> {
+  private _session: ConnectionSession | null;
 
   /**
    * Ping request interval. (Default = 300000 (5 min))
@@ -56,6 +61,7 @@ export class TalkClient
 
   constructor(
     config: Partial<ClientConfig> = {},
+    loader: ClientDataLoader = TalkInMemoryDataLoader,
     private _sessionFactory: SessionFactory = new TalkSessionFactory(),
   ) {
     super();
@@ -66,7 +72,7 @@ export class TalkClient
     this._session = null;
     this._clientSession = new TalkClientSession(this.createSessionProxy(), { ...DefaultConfiguration, ...config });
 
-    this._channelList = new TalkChannelList(this.createSessionProxy());
+    this._channelList = new TalkChannelList(this.createSessionProxy(), loader);
     this._clientUser = { userId: Long.ZERO };
     this._blockList = new TalkBlockSession(this.createSessionProxy());
   }
@@ -113,8 +119,8 @@ export class TalkClient
   async login(credential: OAuthCredential): AsyncCommandResult<LoginResult> {
     if (this.logon) this.close();
 
-    // Create session
-    const sessionRes = await this._sessionFactory.createSession(this.configuration);
+    // Create session stream
+    const sessionRes = await this._sessionFactory.connect(this.configuration);
     if (!sessionRes.success) return sessionRes;
     this._session = sessionRes.result;
     this.listen();
@@ -144,19 +150,17 @@ export class TalkClient
    * @return {boolean} true if client user.
    */
   isClientUser(user: ChannelUser): boolean {
-    return user.userId.equals(this._clientUser.userId);
+    return this._clientUser.userId.equals(user.userId);
   }
 
   /**
    * End session
    */
   close(): void {
-    this.session.close();
+    this.session.stream.close();
   }
 
-  pushReceived(method: string, data: DefaultRes): void {
-    const ctx = new EventContext<ClientEvents>(this);
-
+  pushReceived(method: string, data: DefaultRes, ctx: EventContext<TalkClientEvents>): void {
     this._channelList.pushReceived(method, data, ctx);
 
     switch (method) {
@@ -220,7 +224,7 @@ export class TalkClient
     (async () => {
       for await (const { method, data, push } of this.session.listen()) {
         if (push) {
-          this.pushReceived(method, data);
+          this.pushReceived(method, data, new EventContext<TalkClientEvents>(this));
         }
       }
     })().then(this.listenEnd.bind(this)).catch(this.onError.bind(this));

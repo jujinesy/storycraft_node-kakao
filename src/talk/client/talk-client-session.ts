@@ -5,14 +5,14 @@
  */
 
 import { Long } from 'bson';
-import { NormalChannelData } from '../../channel';
+import { LoginData, NormalChannelData } from '../../channel';
 import { TalkSession } from './index';
 import { ClientStatus } from '../../client-status';
 import { ClientSession, LoginResult } from '../../client';
 import { OAuthCredential } from '../../oauth';
 import { OpenChannelData } from '../../openlink';
 import { LoginListRes } from '../../packet/chat';
-import { AsyncCommandResult, CommandResult, DefaultReq, DefaultRes, KnownDataStatusCode } from '../../request';
+import { AsyncCommandResult, DefaultReq, DefaultRes, KnownDataStatusCode } from '../../request';
 import { ClientConfig } from '../../config';
 import { dataStructToNormalChannelInfo, dataStructToOpenChannelInfo } from '../../packet/struct'
 
@@ -33,7 +33,7 @@ export class TalkClientSession implements ClientSession {
   }
 
 
-  async login(credential: OAuthCredential): Promise<CommandResult<LoginResult>> {
+  async login(credential: OAuthCredential): AsyncCommandResult<LoginResult> {
     const config = this.configuration;
 
     const req: DefaultReq = {
@@ -62,7 +62,7 @@ export class TalkClientSession implements ClientSession {
     this._lastTokenId = loginRes.lastTokenId;
     this._lastBlockTk = loginRes.lbk;
 
-    const channelList: (NormalChannelData | OpenChannelData)[] = [];
+    const channelList: LoginData<NormalChannelData | OpenChannelData>[] = [];
     for (const channelData of loginRes.chatDatas) {
       let channel: (NormalChannelData | OpenChannelData);
 
@@ -79,7 +79,10 @@ export class TalkClientSession implements ClientSession {
         };
       }
 
-      channelList.push(channel);
+      channelList.push({
+        lastUpdate: channelData.o,
+        channel
+      });
     }
 
     return {

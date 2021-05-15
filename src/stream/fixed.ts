@@ -38,7 +38,7 @@ export class FixedReadStream implements ReadStream, FixedStream {
   /**
    * Read size
    */
-  get read(): number {
+  get readSize(): number {
     return this._read;
   }
 
@@ -46,32 +46,19 @@ export class FixedReadStream implements ReadStream, FixedStream {
     return this._read >= this._size;
   }
 
-  iterate(): AsyncIterableIterator<Uint8Array> {
-    const iterable = this._stream.iterate();
-    return {
-      [Symbol.asyncIterator]() {
-        return this;
-      },
+  async read(buffer: Uint8Array): Promise<number | null> {
+    if (this.done) return 0;
 
-      next: async () => {
-        if (this.done) {
-          return { done: true, value: null };
-        }
+    let view: Uint8Array = buffer;
+    if (this._read + view.byteLength > this._size) {
+      view = buffer.subarray(0, this._size - this._read);
+    }
 
-        const next = await iterable.next();
-        if (next.done) {
-          return next;
-        }
+    const read = await this._stream.read(view);
 
-        this._read += next.value.byteLength;
+    if (read) this._read += read;
 
-        if (this._read > this._size) {
-          return { done: false, value: next.value.slice(0, this._read - this._size) };
-        }
-
-        return { done: false, value: next.value };
-      },
-    };
+    return read;
   }
 
   get ended(): boolean {
@@ -105,10 +92,19 @@ export class FixedWriteStream implements WriteStream, FixedStream {
     return this._written;
   }
 
-  async write(data: Uint8Array): Promise<void> {
-    if (this._written + data.byteLength > this._size) throw new Error('Write size exceeded');
-    await this._stream.write(data);
-    this._written += data.byteLength;
+  async write(data: Uint8Array): Promise<number> {
+    if (this.done) return 0;
+
+    let view: Uint8Array = data;
+    if (this._written + view.byteLength > this._size) {
+      view = data.subarray(0, Math.max(this._size - this._written, 0));
+    }
+
+    const written = await this._stream.write(view);
+
+    this._written += written;
+
+    return written;
   }
 
   get ended(): boolean {
