@@ -4,7 +4,7 @@
  * Copyright (c) storycraft. Licensed under the MIT Licence.
  */
 
-import { OpenLinkStruct, OpenKickedMemberStruct, OpenLinkReactionInfo } from "../struct/open/open-link-struct";
+import { OpenLinkStruct, OpenKickedMemberStruct, OpenLinkReactionInfo, LinkReactionType } from "../struct/open/open-link-struct";
 import { PacketJoinInfoReq, PacketJoinInfoRes } from "../../packet/packet-join-info";
 import { Long } from "bson";
 import { PacketInfoLinkRes, PacketInfoLinkReq } from "../../packet/packet-info-link";
@@ -264,11 +264,11 @@ export class OpenLinkManager extends AsyncIdInstanceStore<OpenLink | null> {
 
         let res = await this.client.NetworkManager.requestPacketRes<PacketReactionCountRes>(packet);
 
-        return { status: res.StatusCode, result: { reactionCount: res.ReactionCount.toNumber(), reacted: !!res.Reacted } };
+        return { status: res.StatusCode, result: { reactionCount: res.ReactionCount.toNumber(), reactionType: res.ReactType } };
     }
 
-    async setLinkReacted(linkId: Long, reacted: boolean): Promise<RequestResult<boolean>> {
-        let packet = new PacketReactReq(linkId, reacted ? 1 : 0);
+    async setLinkReacted(linkId: Long, reactionType: LinkReactionType): Promise<RequestResult<boolean>> {
+        let packet = new PacketReactReq(linkId, reactionType);
 
         let res = await this.client.NetworkManager.requestPacketRes<PacketReactRes>(packet);
 
