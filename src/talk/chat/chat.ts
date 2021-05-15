@@ -1,13 +1,14 @@
-import { MessageType } from "./message-type";
+import { ChatType } from "./chat-type";
 import { Long, EJSON } from "bson";
-import { ChatChannel } from "../room/chat-channel";
+import { ChatChannel, OpenChatChannel } from "../channel/chat-channel";
 import { ChatUser } from "../user/chat-user";
 import { ChatAttachment, PhotoAttachment, MessageTemplate } from "../..";
-import { EmoticonAttachment, LongTextAttachment, VideoAttachment, SharpAttachment, MentionContentList, ChatMention } from "./attachment/chat-attachment";
-import { PacketDeleteChatReq } from "../../packet/packet-delete-chat";
+import { EmoticonAttachment, LongTextAttachment, VideoAttachment, MentionContentList, ChatMention, MapAttachment, ReplyAttachment } from "./attachment/chat-attachment";
+import { SharpAttachment } from "./attachment/sharp-attachment";
 import { JsonUtil } from "../../util/json-util";
 import { ChatFeed } from "./chat-feed";
-import { KakaoLinkV2Attachment } from "./attachment/kakaolink-attachment";
+import { CustomAttachment } from "./attachment/custom-attachment";
+import { ChannelType } from "./channel-type";
 
 /*
  * Created on Fri Nov 01 2019
@@ -85,6 +86,10 @@ export abstract class Chat {
         return this.mentionMap;
     }
 
+    async markChatRead() {
+        await this.channel.markChannelRead(this.logId);
+    }
+
     getMentionContentList() {
         return Array.from(this.mentionMap.values());
     }
@@ -107,10 +112,10 @@ export abstract class Chat {
         return this.getUserMentionList(userId)!.IndexList.length;
     }
 
-    abstract get Type(): MessageType;
+    abstract get Type(): ChatType;
 
     isFeed(): boolean {
-        return this.Type === MessageType.Feed;
+        return this.Type === ChatType.Feed;
     }
     
     private feed?: ChatFeed;
@@ -169,24 +174,70 @@ export abstract class Chat {
         return this.Sender.isClientUser();
     }
 
+    get Hidable(): boolean {
+        return this.channel.isOpenChat() && this.channel.Type === ChannelType.OPENCHAT_GROUP;
+    }
+
     async delete(): Promise<boolean> {
         if (!this.Deletable) {
             return false;
         }
 
-        return this.channel.Client.NetworkManager.sendPacket(new PacketDeleteChatReq(this.channel.ChannelId, this.logId));
+        return this.channel.Client.ChatManager.deleteChat(this.Channel.Id, this.logId);
+    }
+
+    async hide(): Promise<boolean> {
+        if (!this.Hidable) {
+            return false;
+        }
+
+        let openChannel = this.channel as OpenChatChannel;
+
+        return openChannel.hideChat(this);
     }
     
+}
+
+export class UnknownChat extends Chat {
+
+    private rawAttachment: any = {};
+    
+    get Type() {
+        return ChatType.Unknown;
+    }
+
+    get RawAttachment() {
+        return this.rawAttachment;
+    }
+
+    protected readAttachment(attachmentJson: any, attachmentList: ChatAttachment[]) {
+        this.rawAttachment = attachmentJson;
+    }
+
+}
+
+export class FeedChat extends Chat {
+    
+    get Type() {
+        return ChatType.Feed;
+    }
+
+    protected readAttachment(attachmentJson: any, attachmentList: ChatAttachment[]) {
+        
+    }
+
 }
 
 export class TextChat extends Chat {
     
     get Type() {
-        return MessageType.Text;
+        return ChatType.Text;
     }
 
     protected readAttachment(attachmentJson: any, attachmentList: ChatAttachment[]) {
-        
+        if (attachmentJson['path'] && attachmentJson['k'] && attachmentJson['s'] && attachmentJson['cs']) { // :(
+            attachmentList.push(new LongTextAttachment(attachmentJson['path'], attachmentJson['k'], attachmentJson['s']));
+        }
     }
 
 }
@@ -202,7 +253,7 @@ export abstract class PhotoChat extends Chat {
 export class SinglePhotoChat extends PhotoChat {
 
     get Type() {
-        return MessageType.Photo;
+        return ChatType.Photo;
     }
 
     protected readAttachment(attachmentJson: any, attachmentList: ChatAttachment[]) {
@@ -218,7 +269,7 @@ export class SinglePhotoChat extends PhotoChat {
 export class MultiPhotoChat extends PhotoChat {
 
     get Type() {
-        return MessageType.MultiPhoto;
+        return ChatType.MultiPhoto;
     }
 
     protected readAttachment(attachmentJson: any, attachmentList: ChatAttachment[]) {
@@ -249,7 +300,7 @@ export abstract class EmoticonChat extends Chat {
 export class StaticEmoticonChat extends EmoticonChat {
     
     get Type() {
-        return MessageType.Sticker;
+        return ChatType.Sticker;
     }
 
     protected readAttachment(attachmentJson: any, attachmentList: ChatAttachment[]) {
@@ -264,7 +315,7 @@ export class StaticEmoticonChat extends EmoticonChat {
 export class AnimatedEmoticonChat extends EmoticonChat {
     
     get Type() {
-        return MessageType.StickerAni;
+        return ChatType.StickerAni;
     }
 
     protected readAttachment(attachmentJson: any, attachmentList: ChatAttachment[]) {
@@ -279,7 +330,7 @@ export class AnimatedEmoticonChat extends EmoticonChat {
 export class VideoChat extends Chat {
     
     get Type() {
-        return MessageType.Video;
+        return ChatType.Video;
     }
 
     protected readAttachment(attachmentJson: any, attachmentList: ChatAttachment[]) {
@@ -296,12 +347,12 @@ export class VideoChat extends Chat {
 export class LongTextChat extends Chat {
     
     get Type() {
-        return MessageType.Text;
+        return ChatType.Text;
     }
 
     protected readAttachment(attachmentJson: any, attachmentList: ChatAttachment[]) {
         let textAttachment = new LongTextAttachment();
-        textAttachment.readAttachment(LongTextAttachment);
+        textAttachment.readAttachment(attachmentJson);
 
         attachmentList.push(textAttachment);
     }
@@ -311,7 +362,7 @@ export class LongTextChat extends Chat {
 export class SharpSearchChat extends Chat {
     
     get Type() {
-        return MessageType.Search;
+        return ChatType.Search;
     }
 
     protected readAttachment(attachmentJson: any, attachmentList: ChatAttachment[]) {
@@ -320,38 +371,98 @@ export class SharpSearchChat extends Chat {
         sharpAttachment.readAttachment(attachmentJson);
 
         attachmentList.push(sharpAttachment);
+    }
+
+}
+
+export class MapChat extends Chat {
+
+    get Type() {
+        return ChatType.Map;
+    }
+
+    protected readAttachment(attachmentJson: any, attachmentList: ChatAttachment[]) {
+        let mapAttachment = new MapAttachment();
+
+        mapAttachment.readAttachment(attachmentJson);
+
+        attachmentList.push(mapAttachment);
     }
 
 }
 
 export class ReplyChat extends Chat {
+
+    private contentOnly: boolean = false;
     
     get Type() {
-        return MessageType.Reply;
+        return ChatType.Reply;
+    }
+
+    get ShowContentOnly() {
+        return this.contentOnly;
     }
 
     protected readAttachment(attachmentJson: any, attachmentList: ChatAttachment[]) {
-        let sharpAttachment = new SharpAttachment();
+        let replyAttachment = new ReplyAttachment();
 
-        sharpAttachment.readAttachment(attachmentJson);
+        replyAttachment.readAttachment(attachmentJson);
 
-        attachmentList.push(sharpAttachment);
+        attachmentList.push(replyAttachment);
+
+        if (attachmentJson['attach_type']) {
+            let contentChat = new (TypeMap.getChatConstructor(attachmentJson['attach_type']))(this.Channel, this.Sender, this.MessageId, this.LogId, this.PrevLogId, this.SendTime, this.Text, attachmentJson['attach_content']);
+            attachmentList.push(...contentChat.AttachmentList);
+        }
+
+        if (attachmentJson['attach_only']) this.contentOnly = true;
     }
 
 }
 
-export class KakaoLinkV2Chat extends Chat {
+export class CustomChat extends Chat {
     
     get Type() {
-        return MessageType.KakaoLinkV2;
+        return ChatType.Custom;
     }
 
     protected readAttachment(attachmentJson: any, attachmentList: ChatAttachment[]) {
-        let linkAttachment = new KakaoLinkV2Attachment();
+        let customAttachment = new CustomAttachment();
 
-        linkAttachment.readAttachment(attachmentJson);
+        customAttachment.readAttachment(attachmentJson);
 
-        attachmentList.push(linkAttachment);
+        attachmentList.push(customAttachment);
     }
 
+}
+
+export namespace TypeMap {
+
+    export type ChatConstructor = new (channel: ChatChannel, sender: ChatUser, messageId: number, logId: Long, prevLogId: Long, sendTime: number, text: string, rawAttachment: string | undefined) => Chat;
+
+    let typeMap: Map<ChatType, ChatConstructor> = new Map();
+
+    let defaultConstructor: ChatConstructor = UnknownChat;
+
+    export function getDefaultConstructor() {
+        return defaultConstructor;
+    }
+
+    export function getChatConstructor(type: ChatType): ChatConstructor {
+        return typeMap.get(type) || defaultConstructor;
+    }
+
+    typeMap.set(ChatType.Feed, FeedChat);
+    typeMap.set(ChatType.Text, TextChat);
+    typeMap.set(ChatType.Photo, SinglePhotoChat);
+    typeMap.set(ChatType.MultiPhoto, MultiPhotoChat);
+    typeMap.set(ChatType.Video, VideoChat);
+    typeMap.set(ChatType.Sticker, StaticEmoticonChat);
+    typeMap.set(ChatType.StickerAni, AnimatedEmoticonChat);
+    typeMap.set(ChatType.Search, SharpSearchChat);
+    typeMap.set(ChatType.Map, MapChat);
+    typeMap.set(ChatType.Reply, ReplyChat);
+    typeMap.set(ChatType.Custom, CustomChat);
+
+    
 }

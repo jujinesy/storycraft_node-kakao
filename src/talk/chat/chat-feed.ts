@@ -4,72 +4,81 @@
  * Copyright (c) storycraft. Licensed under the MIT Licence.
  */
 
-import { Chat } from "./chat";
 import { FeedType } from "../feed/feed-type";
-import { Long } from "bson";
 import { JsonUtil } from "../../util/json-util";
+import { Long } from "bson";
+import { StructBase } from "../struct/struct-base";
+import { MemberStruct } from "../struct/member-struct";
 
-export class ChatFeed {
+export namespace FeedFragment {
 
-    constructor(private feedType: FeedType, private memberId?: Long, private memberNickname?: string, private text?: string) {
+    export interface Hidden extends StructBase {
+    
+        readonly hidden: boolean;
+    
+    }
+    
+    export interface Member extends StructBase {
         
+        readonly member: FeedMemberStruct;
+    
     }
-
-    get FeedType() {
-        return this.feedType;
+    
+    export interface MemberList extends StructBase {
+        
+        readonly members: FeedMemberStruct[];
+    
     }
-
-    // for member speific feeds
-
-    get MemberId() {
-        return this.memberId;
+    
+    export interface Inviter extends StructBase {
+        
+        readonly inviter: FeedMemberStruct;
+    
     }
-
-    get MemberNickname() {
-        return this.memberNickname;
+    
+    export interface Message extends StructBase {
+        
+        readonly logId: Long;
+    
     }
-
-    // for rich content
-    get Text() {
-        return this.text;
-    }
-
-    static getFeedFromText(rawFeed: string): ChatFeed {
-        let obj = JsonUtil.parseLoseless(rawFeed);
-
-        let type = obj['feedType'] as FeedType;
-        let memberInfo = obj['member'];
-
-        if (memberInfo) {
-            return new ChatFeed(type, memberInfo['userId'], memberInfo['nickName']);
-        }
-
-        return new ChatFeed(type, undefined, undefined, obj['text']); // is it correct?
-    }
-
-    static feedToJson(feed: ChatFeed): any {
-        let obj: any = {};
-        let memberObj: any = {};
-
-        if (feed.memberId) {
-            memberObj['userId'] = feed.memberId;
-        }
-
-        if (feed.memberNickname) {
-            memberObj['nickName'] = feed.memberNickname;
-        }
-
-        obj['feedType'] = feed.feedType;
-
-        if (Object.keys(memberObj).length > 0) {
-            obj['member'] = memberObj;
-        }
-
-        if (feed.text) {
-            obj['text'] = feed.text;
-        }
-
-        return obj;
+    
+    export interface RichContent extends StructBase {
+        
+        readonly text: string;
+    
     }
 
 }
+
+export interface FeedMemberStruct extends StructBase {
+
+    userId: Long,
+    nickName: string
+
+}
+
+export interface ChatFeed extends StructBase {
+
+    readonly feedType: FeedType;
+
+}
+
+export namespace ChatFeed {
+
+    export function getFeedFromText<T extends ChatFeed = ChatFeed>(raw: string): T {
+        try {
+            return JsonUtil.parseLoseless(raw);
+        } catch (e) {
+            throw new Error(`Invalid feed: ${e}`);
+        }
+    }
+
+}
+
+export type InviteFeed = ChatFeed & FeedFragment.Inviter & FeedFragment.Member & FeedFragment.MemberList;
+export type LeaveFeed = ChatFeed & FeedFragment.Member;
+export type RichContentFeed = ChatFeed & FeedFragment.RichContent;
+export type OpenJoinFeed = ChatFeed & FeedFragment.Member;
+export type OpenRewriteFeed = ChatFeed & FeedFragment.Member & FeedFragment.Message & FeedFragment.Hidden;
+export type OpenKickFeed = ChatFeed & FeedFragment.Member;
+export type DeleteAllFeed = ChatFeed & FeedFragment.Member & FeedFragment.Message & FeedFragment.Hidden;

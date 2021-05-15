@@ -2,6 +2,7 @@ import { LocoBsonRequestPacket, LocoBsonResponsePacket } from "./loco-bson-packe
 import { Long } from "bson";
 import { ChatInfoStruct } from "../talk/struct/chat-info-struct";
 import { JsonUtil } from "../util/json-util";
+import { Serializer } from "json-proxy-mapper";
 
 /*
  * Created on Wed Mar 04 2020
@@ -11,7 +12,11 @@ import { JsonUtil } from "../util/json-util";
 
 export class PacketCreateChatReq extends LocoBsonRequestPacket {
 
-    constructor(public UserIdList: Long[] = []) {
+    constructor(
+        public UserIdList: Long[] = [],
+        public Nickname: string = '',
+        public ProfileURL: string = ''
+        ) {
         super();
     }
 
@@ -20,9 +25,14 @@ export class PacketCreateChatReq extends LocoBsonRequestPacket {
     }
 
     toBodyJson(): any {
-        return {
+        let obj: any = {
             'memberIds': this.UserIdList
-        }
+        };
+
+        if (this.Nickname !== '') obj['nickname'] = this.Nickname;
+        if (this.ProfileURL !== '') obj['profileImageUrl'] = this.ProfileURL;
+
+        return obj;
     }
 
 }
@@ -32,7 +42,7 @@ export class PacketCreateChatRes extends LocoBsonResponsePacket {
     constructor(
         status: number,
         public ChannelId: Long = Long.ZERO,
-        public readonly ChatInfo: ChatInfoStruct = new ChatInfoStruct()
+        public ChatInfo?: ChatInfoStruct
         ) {
             super(status);
     }
@@ -42,8 +52,9 @@ export class PacketCreateChatRes extends LocoBsonResponsePacket {
     }
     
     readBodyJson(rawBody: any) {
-        this.ChannelId = JsonUtil.readLong(rawBody['c']);
-        this.ChatInfo.fromJson(rawBody['chatRoom']);
+        this.ChannelId = JsonUtil.readLong(rawBody['chatId']);
+
+        if (rawBody['chatRoom']) this.ChatInfo = Serializer.deserialize<ChatInfoStruct>(rawBody['chatRoom'], ChatInfoStruct.MAPPER);
     }
 
 }

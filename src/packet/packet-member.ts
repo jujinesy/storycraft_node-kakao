@@ -2,6 +2,7 @@ import { LocoBsonRequestPacket, LocoBsonResponsePacket } from "./loco-bson-packe
 import { Long } from "bson";
 import { JsonUtil } from "../util/json-util";
 import { MemberStruct } from "../talk/struct/member-struct";
+import { Serializer } from "json-proxy-mapper";
 
 /*
  * Created on Tue Jan 14 2020
@@ -35,7 +36,7 @@ export class PacketMemberRes extends LocoBsonResponsePacket {
 
     constructor(
         status: number,
-        public ChatId: Long = Long.ZERO,
+        public ChannelId: Long = Long.ZERO,
         public MemberList: MemberStruct[] = []
     ) {
         super(status);
@@ -48,16 +49,13 @@ export class PacketMemberRes extends LocoBsonResponsePacket {
     readBodyJson(json: any) {
         this.MemberList = [];
         
-        this.ChatId = JsonUtil.readLong(json['chatId']);
+        this.ChannelId = JsonUtil.readLong(json['chatId']);
 
         if (json['members']) {
             let memberList: any[] = json['members'];
 
             for (let rawMemberStruct of memberList) {
-                let memberStruct = new MemberStruct();
-                memberStruct.fromJson(rawMemberStruct);
-
-                this.MemberList.push(memberStruct);
+                this.MemberList.push(Serializer.deserialize<MemberStruct>(rawMemberStruct, MemberStruct.MAPPER));
             }
         }
     }

@@ -1,8 +1,9 @@
 import { LocoBsonRequestPacket, LocoBsonResponsePacket } from "./loco-bson-packet";
-import { MessageType } from "../talk/chat/message-type";
+import { ChatType } from "../talk/chat/chat-type";
 import { ChatlogStruct } from "../talk/struct/chatlog-struct";
 import { JsonUtil } from "../util/json-util";
 import { Long } from "bson";
+import { Serializer } from "json-proxy-mapper";
 
 /*
  * Created on Tue Oct 29 2019
@@ -15,7 +16,7 @@ export class PacketMessageWriteReq extends LocoBsonRequestPacket {
         public MessageId: number = 0,
         public ChannelId: Long = Long.ZERO,
         public Text: string = '',
-        public Type: MessageType = MessageType.Text,
+        public Type: ChatType = ChatType.Text,
         public NoSeen: boolean = false,
         public Extra: string = ''
     ) {
@@ -76,7 +77,7 @@ export class PacketMessageRes extends LocoBsonResponsePacket {
         status: number,
         public ChannelId: Long = Long.fromNumber(-1),
         public SenderNickname: string = '',
-        public readonly Chatlog: ChatlogStruct = new ChatlogStruct(),
+        public Chatlog?: ChatlogStruct,
         public NoSeen: boolean = false,
         public PushAlert: boolean = false
     ) {
@@ -95,7 +96,7 @@ export class PacketMessageRes extends LocoBsonResponsePacket {
         this.NoSeen = body['noSeen'];
 
         if (body['chatLog']) {
-            this.Chatlog.fromJson(body['chatLog']);
+            this.Chatlog = Serializer.deserialize<ChatlogStruct>(body['chatLog'], ChatlogStruct.MAPPER);
         }
     }
 

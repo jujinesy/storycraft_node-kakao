@@ -28,7 +28,7 @@ export class KakaoAPI {
     }
 
     static get Version() {
-        return '3.1.1';
+        return '3.1.2';
     }
 
     static get InternalAppVersion() {
@@ -65,6 +65,10 @@ export class KakaoAPI {
 
     static get InternalHost() {
         return 'sb-talk.kakao.com';
+    }
+
+    static get ServiceHost() {
+        return 'katalk.kakao.com';
     }
 
     static get LocoEntry() {
@@ -260,28 +264,17 @@ export class KakaoAPI {
         return `${KakaoAPI.InternalProtocol}://${KakaoAPI.InternalHost}`;
     }
 
+    static get ServiceURL() {
+        return `${KakaoAPI.InternalProtocol}://${KakaoAPI.ServiceHost}`;
+    }
+
     static get AccountPath() {
         return 'account';
     }
 
 
-
-
-    static get Account() {
-        return Account;
-    }
-
-    static get LogonAccount() {
-        return LogonAccount;
-    }
-
-
-
-    static getInternalURL(type: LogonAccount) {
-        return `${KakaoAPI.InternalURL}/${KakaoAPI.Agent}/${KakaoAPI.AccountPath}/${type}`;
-    }
-
-    static getAccountInternalURL(type: Account) {
+    
+    static getAccountInternalURL(type: KakaoAPI.Account) {
         return `${KakaoAPI.AccountInternalURL}/${KakaoAPI.Agent}/${KakaoAPI.AccountPath}/${type}`;
     }
 
@@ -353,25 +346,29 @@ export class KakaoAPI {
         };
     }
 
-    static getSessionHeader(accessToken: string, deviceUUID: string) {
-        return {
-            'Host': KakaoAPI.InternalHost,
-            'Authorization': `${accessToken}-${deviceUUID}`,
-            'A': KakaoAPI.AuthHeaderAgent,
-            'User-Agent': KakaoAPI.AuthUserAgent,
-            'Accept': '*/*',
-            'Accept-Language': KakaoAPI.Language
-        };
-    }
-
-    static getLoginData(email: string, password: string, deviceUUID: string, deviceName: string, permanent = true, osVersion: string = KakaoAPI.OSVersion) {
+    static getLoginData(email: string, password: string, deviceUUID: string, deviceName: string, permanent = true, osVersion: string = KakaoAPI.OSVersion, forced: boolean = false) {
         return {
             'email': email,
             'password': password,
             'device_uuid': deviceUUID,
             'os_version': osVersion,
             'device_name': deviceName,
-            'permanent': permanent
+            'permanent': permanent,
+            'forced': forced
+        }
+    }
+
+    static getAutoLoginData(email: string, token: string, deviceUUID: string, deviceName: string, locked: boolean, permanent = true, osVersion: string = KakaoAPI.OSVersion, forced: boolean = false) {
+        return {
+            'email': email,
+            'password': token,
+            'device_uuid': deviceUUID,
+            'permanent': permanent,
+            'os_version': osVersion,
+            'device_name': deviceName,
+            'forced': forced,
+            'autowithlock': locked,
+            'auto_login': true
         }
     }
 
@@ -387,13 +384,26 @@ export class KakaoAPI {
         }
     }
     
-    static requestLogin(email: string, password: string, deviceUUID: string, deviceName: string, permanent?: boolean, osVersion?: string, verifyCodeExtra: string = this.calculateXVCKey(this.AuthUserAgent, email, deviceUUID)) {
-        let loginData = KakaoAPI.getLoginData(email, password, deviceUUID, deviceName, permanent, osVersion);
+    static requestLogin(email: string, password: string, deviceUUID: string, deviceName: string, forced?: boolean, permanent?: boolean, osVersion?: string, verifyCodeExtra: string = this.calculateXVCKey(this.AuthUserAgent, email, deviceUUID)) {
+        let loginData = KakaoAPI.getLoginData(email, password, deviceUUID, deviceName, permanent, osVersion, forced);
 
         let queryData = querystring.stringify(loginData);
         
         return request({
-            url: KakaoAPI.getAccountInternalURL(Account.LOGIN),
+            url: KakaoAPI.getAccountInternalURL(KakaoAPI.Account.LOGIN),
+            headers: KakaoAPI.getAuthHeader(verifyCodeExtra, queryData.length),
+            body: queryData,
+            method: 'POST'
+        });
+    }
+
+    static requestAutoLogin(locked: boolean, email: string, token: string, deviceUUID: string, deviceName: string, forced?: boolean, permanent?: boolean, osVersion?: string, verifyCodeExtra: string = this.calculateXVCKey(this.AuthUserAgent, email, deviceUUID)) {
+        let loginData = KakaoAPI.getAutoLoginData(email, token, deviceUUID, deviceName, locked, permanent, osVersion, forced);
+
+        let queryData = querystring.stringify(loginData);
+        
+        return request({
+            url: KakaoAPI.getAccountInternalURL(KakaoAPI.Account.LOGIN),
             headers: KakaoAPI.getAuthHeader(verifyCodeExtra, queryData.length),
             body: queryData,
             method: 'POST'
@@ -406,7 +416,7 @@ export class KakaoAPI {
         let queryData = querystring.stringify(loginData);
         
         return request({
-            url: KakaoAPI.getAccountInternalURL(Account.REQUEST_PASSCODE),
+            url: KakaoAPI.getAccountInternalURL(KakaoAPI.Account.REQUEST_PASSCODE),
             headers: KakaoAPI.getAuthHeader(verifyCodeExtra, queryData.length),
             body: queryData,
             method: 'POST'
@@ -419,7 +429,7 @@ export class KakaoAPI {
         let queryData = querystring.stringify(deviceRegisterData);
         
         return request({
-            url: KakaoAPI.getAccountInternalURL(Account.REGISTER_DEVICE),
+            url: KakaoAPI.getAccountInternalURL(KakaoAPI.Account.REGISTER_DEVICE),
             headers: KakaoAPI.getAuthHeader(verifyCodeExtra, queryData.length),
             body: queryData,
             method: 'POST'
@@ -440,40 +450,14 @@ export class KakaoAPI {
         return hash.digest('hex');
     }
 
-    static requestAccountSettings(accessToken: string, deviceUUID: string, since: number = 0, language: string = KakaoAPI.Language) {
-        return request({
-            url: `${KakaoAPI.getInternalURL(LogonAccount.MORE_SETTINGS)}?since=${since}&lang=${language}`,
-            headers: KakaoAPI.getSessionHeader(accessToken, deviceUUID),
-            method: 'GET'
-        });
+
+    static createSendTextURL(message: string) {
+        return `kakaotalk://leverage?action=sendtext&message=${encodeURIComponent(message)}`;
     }
 
-    static requestAutoLoginToken(accessToken: string, deviceUUID: string) {
-        return request({
-            url: `${KakaoAPI.getInternalURL(LogonAccount.LOGIN_TOKEN)}`,
-            headers: KakaoAPI.getSessionHeader(accessToken, deviceUUID),
-            method: 'GET'
-        });
+    static createJoinLinkURL(code: string, ref: string = 'EW') {
+        return `kakaoopen://join?l=${code}&r=${ref}`;
     }
-}
-
-enum Account {
-    LOGIN = 'login.json',
-    REGISTER_DEVICE = 'register_device.json',
-    REQUEST_PASSCODE = 'request_passcode.json',
-    LOGIN_TOKEN = 'login_token.json',
-    REQUEST_VERIFY_EMAIL = 'request_verify_email.json',
-    RENEW_TOKEN = 'renew_token.json',
-    CHANGE_UUID = 'change_uuid.json',
-    CAN_CHANGE_UUID = 'can_change_uuid.json',
-
-}
-
-enum LogonAccount {
-    MORE_SETTINGS = 'more_settings.json',
-    LESS_SETTINGS = 'less_settings.json',
-    BLOCKED_LIST = 'blocked.json',
-    LOGIN_TOKEN = 'login_token.json'
 }
 
 
@@ -486,6 +470,39 @@ export namespace KakaoAPI {
         VIDEO = 'video/mp4',
         FILE = 'image/jpeg'//'application/*' //THIS DOESNT WORK WTF WHY
 
+    }
+
+    export enum Account {
+        
+        LOGIN = 'login.json',
+        REGISTER_DEVICE = 'register_device.json',
+        REQUEST_PASSCODE = 'request_passcode.json'
+    
+    }
+
+    export enum RequestStatusCode { // Note StatusCode in loco-packet-base.ts uses almost same code. (loco packets were https requests before)
+
+        SUCCESS = 0,
+        LOGIN_FAILED_REASON = 12,
+        LOGIN_FAILED = 30,
+        MOBILE_UNREGISTERED = 32,
+        DEVICE_NOT_REGISTERED = -100,
+        ANOTHER_LOGON = -101,
+        DEVICE_REGISTER_FAILED = -102,
+        PASSCODE_REQUEST_FAILED = -112,
+        OPERATION_DENIED = -500,
+        ACCOUNT_RESTRICTED = -997
+
+    }
+
+    export enum LogonAccount {
+    
+        LOGIN_TOKEN = 'login_token.json',
+        REQUEST_VERIFY_EMAIL = 'request_verify_email.json',
+        RENEW_TOKEN = 'renew_token.json',
+        CHANGE_UUID = 'change_uuid.json',
+        CAN_CHANGE_UUID = 'can_change_uuid.json'
+    
     }
 
 }

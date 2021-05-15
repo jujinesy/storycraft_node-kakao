@@ -1,5 +1,5 @@
-import { MessageType } from "../message-type";
-import { ChatAttachment, SharpAttachment, EmoticonAttachment, ChatContent } from "../attachment/chat-attachment";
+import { ChatType } from "../chat-type";
+import { ChatAttachment, EmoticonAttachment, ChatContent, ReplyAttachment } from "../attachment/chat-attachment";
 import { JsonUtil } from "../../../util/json-util";
 import { ChatBuilder } from "../chat-builder";
 
@@ -13,7 +13,7 @@ export interface MessageTemplate {
 
     readonly Valid: boolean;
 
-    getMessageType(): MessageType;
+    getMessageType(): ChatType;
 
     getPacketText(): string;
     getPacketExtra(): string;
@@ -66,52 +66,35 @@ export class AttachmentTemplate implements MessageTemplate {
         return this.packetText;
     }
 
+    protected getRawExtra(): any {
+        return { ...this.textExtra, ...this.attachment.toJsonAttachment() };
+    }
+
     getPacketExtra() {
-        return JsonUtil.stringifyLoseless({ ...this.textExtra, ...this.attachment.toJsonAttachment() });
+        return JsonUtil.stringifyLoseless(this.getRawExtra());
     }
 
 }
 
-//@depreacted
-export class SharpMessageTemplate implements MessageTemplate {
+export class ReplyContentTemplate extends AttachmentTemplate {
 
     constructor(
-        private text: string = 'Search message',
-        private sharpAttachment: SharpAttachment
+        reply: ReplyAttachment,
+        private content: ChatAttachment,
+        ...textFormat: (string | ChatContent)[]
     ) {
-
+        super(reply, ...textFormat);
+    }
+    
+    getReplyContent() {
+        return {
+            'attach_type': this.content.RequiredMessageType,
+            'attach_content': this.content.toJsonAttachment()
+        }
     }
 
-    getMessageType() {
-        return MessageType.Search;
-    }
-
-    get Text() {
-        return this.text;
-    }
-
-    set Text(text) {
-        this.text = text;
-    }
-
-    get SharpAttachment() {
-        return this.sharpAttachment;
-    }
-
-    set SharpAttachment(value) {
-        this.sharpAttachment = value;
-    }
-
-    get Valid() {
-        return true;
-    }
-
-    getPacketText() {
-        return this.text;
-    }
-
-    getPacketExtra() {
-        return JSON.stringify(this.sharpAttachment.toJsonAttachment());
+    protected getRawExtra() {
+        return Object.assign(super.getRawExtra(), this.getReplyContent());
     }
 
 }
