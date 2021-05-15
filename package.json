@@ -1,6 +1,6 @@
 {
   "name": "node-kakao",
-  "version": "4.2.1",
+  "version": "4.2.2",
   "description": "Loco protocol compatible library",
   "main": "./dist/index.js",
   "exports": {
@@ -43,8 +43,8 @@
   },
   "license": "MIT",
   "devDependencies": {
-    "@rollup/plugin-commonjs": "^18.0.0",
-    "@rollup/plugin-node-resolve": "^11.1.0",
+    "@rollup/plugin-commonjs": "^19.0.0",
+    "@rollup/plugin-node-resolve": "^13.0.0",
     "@rollup/plugin-typescript": "^8.2.0",
     "@types/bson": "^4.0.0",
     "@types/chai": "^4.2.3",
@@ -60,7 +60,7 @@
     "eslint-config-prettier": "^8.0.0",
     "mocha": "^8.3.0",
     "rollup": "^2.38.1",
-    "ts-node": "^8.10.2",
+    "ts-node": "^9.1.1",
     "tslib": "^2.1.0",
     "typedoc": "^0.20.18",
     "typescript": "^4.1.3"

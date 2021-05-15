@@ -53,6 +53,9 @@ export class AxiosWebClient implements WebClient, HeaderDecorator {
       transformResponse: (data) => data,
 
       responseType: 'arraybuffer',
+
+      maxContentLength: 100000000,
+      maxBodyLength: 100000000
     };
 
     if (header) Object.assign(headers, header);
