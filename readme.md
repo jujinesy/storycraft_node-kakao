@@ -11,11 +11,13 @@ Note: this implemention can stop working anytime.
 
 ## Warning
 
-Many functions that I may not know are disabled or tricked to keep this client simple.
+Client can act differently from official client. Abusing this client can cause permanent service restriction.
 
-## Example code
+## Example
 
-```javascript
+```typescript
+import { TalkClient, Chat, ChatType, ChatMention, LoginError } from '@storycraft/node-kakao';
+
 let client = new TalkClient('TEST_CLIENT', 'random base64 device id');
 
 client.on('message', (chat: Chat) => {
@@ -35,7 +37,12 @@ client.on('message', (chat: Chat) => {
     }
 });
 
-await client.login('123456789@email.com', '123456');
+client.login('123456789@email.com', '123456')
+        .then(() => console.log('Login succeed'))
+        .catch((err: LoginError) => {
+            console.error(`Login failed. status: ${err.status}, message: ${err.message}`);
+        });
+
 ```
 
 License
@@ -44,9 +51,8 @@ node-kakao is following MIT License.
 
 Basic Reference
 ---------
-hallazzang([pykakao](https://github.com/hallazzang/pykakao/))  
-ssut([pykakao](https://github.com/ssut/pykakao))  
-Cai([0x90 :: Cai's Blog](http://www.bpak.org/blog/))
+[pykakao](https://github.com/hallazzang/pykakao/)(hallazzang)  
+[pykakao](https://github.com/ssut/pykakao)(ssut)
 - [[KakaoTalk+] LOCO 프로토콜 분석 (1)](http://www.bpak.org/blog/2012/12/kakaotalk-loco-프로토콜-분석-1/)
 - [[KakaoTalk+] LOCO 프로토콜 분석 (2)](http://www.bpak.org/blog/2012/12/kakaotalk-loco-프로토콜-분석-2/)
 - [[KakaoTalk+] LOCO 프로토콜 분석 (3)](http://www.bpak.org/blog/2012/12/kakaotalk-loco-프로토콜-분석-3/)

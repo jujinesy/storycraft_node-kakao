@@ -1,27 +1,27 @@
-import { NetworkManager } from "./network/network-manager";
-import { ClientChatUser, ClientUserInfo } from "./talk/user/chat-user";
-import { EventEmitter } from "events";
-import { MemoChatChannel } from "./talk/channel/chat-channel";
-import { MoreSettingsStruct } from "./talk/struct/api/account/client-settings-struct";
-import { UserManager } from "./talk/user/user-manager";
-import { ChannelManager } from "./talk/channel/channel-manager";
-import { ChatManager } from "./talk/chat/chat-manager";
-import { OpenLinkManager } from "./talk/open/open-link-manager";
-import { ServiceClient } from "./api/service-client";
-import { WebApiStatusCode } from "./talk/struct/web-api-struct";
-import { PacketSetStatusReq, PacketSetStatusRes } from "./packet/packet-set-status";
-import { StatusCode } from "./packet/loco-packet-base";
-import { ClientStatus } from "./client-status";
-import { UserType } from "./talk/user/user-type";
-import { RequestResult } from "./talk/request/request-result";
-import { ClientEvents } from "./event/events";
 import { Long } from "bson";
+import { EventEmitter } from "events";
 import { AuthClient } from "./api/auth-client";
+import { ChannelBoardClient, OpenChannelBoardClient } from "./api/channel-board-client";
 import { OpenChatClient } from "./api/open-chat-client";
 import { OpenUploadApi } from "./api/open-upload-api";
-import { ChannelBoardClient, OpenChannelBoardClient } from "./api/channel-board-client";
+import { ServiceClient } from "./api/service-client";
+import { ClientStatus } from "./client-status";
 import { ClientConfig } from "./config/client-config";
 import { ClientConfigProvider, DefaultClientConfigProvider } from "./config/client-config-provider";
+import { ClientEvents } from "./event/events";
+import { NetworkManager } from "./network/network-manager";
+import { StatusCode } from "./packet/loco-packet-base";
+import { PacketSetStatusReq, PacketSetStatusRes } from "./packet/packet-set-status";
+import { ChannelManager } from "./talk/channel/channel-manager";
+import { MemoChatChannel } from "./talk/channel/chat-channel";
+import { ChatManager } from "./talk/chat/chat-manager";
+import { OpenLinkManager } from "./talk/open/open-link-manager";
+import { RequestResult } from "./talk/request/request-result";
+import { MoreSettingsStruct } from "./talk/struct/api/account/client-settings-struct";
+import { WebApiStatusCode } from "./talk/struct/web-api-struct";
+import { ClientChatUser, ClientUserInfo } from "./talk/user/chat-user";
+import { UserManager } from "./talk/user/user-manager";
+import { UserType } from "./talk/user/user-type";
 
 /*
  * Created on Fri Nov 01 2019
@@ -104,15 +104,15 @@ export class TalkApiClient extends EventEmitter implements ApiClient {
 
         this.configProvider = new DefaultClientConfigProvider(config);
 
-        this.auth = new AuthClient(name, deviceUUID);
+        this.auth = new AuthClient(name, deviceUUID, this.configProvider);
 
-        this.service = new ServiceClient(this.auth);
+        this.service = new ServiceClient(this.auth, this.configProvider);
 
-        this.openchatWeb = new OpenChatClient(this.auth);
-        this.openUploadApi = new OpenUploadApi();
+        this.openchatWeb = new OpenChatClient(this.auth, this.configProvider);
+        this.openUploadApi = new OpenUploadApi(this.configProvider);
 
-        this.channelBoard = new ChannelBoardClient(this.auth);
-        this.openChannelBoard = new OpenChannelBoardClient(this.auth);
+        this.channelBoard = new ChannelBoardClient(this.auth, this.configProvider);
+        this.openChannelBoard = new OpenChannelBoardClient(this.auth, this.configProvider);
     }
 
     get Name() {
@@ -198,7 +198,7 @@ export class TalkClient extends TalkApiClient implements LocoClient {
     constructor(name: string, deviceUUID: string, config?: Partial<ClientConfig>) {
         super(name, deviceUUID, config);
 
-        this.networkManager = new NetworkManager(this);
+        this.networkManager = new NetworkManager(this, this.ConfigProvider);
         this.channelManager = new ChannelManager(this);
         this.userManager = new UserManager(this);
 
@@ -241,18 +241,14 @@ export class TalkClient extends TalkApiClient implements LocoClient {
     }
 
     async login(email: string, password: string, forced: boolean = false) {
-        if (this.LocoLogon) {
-            throw new Error('Already logon to loco');
-        }
+        if (this.LocoLogon) throw { status: WebApiStatusCode.OPERATION_DENIED, message: `Already logon to loco` } as LoginError;
 
         await super.login(email, password, forced);
         await this.locoLogin();
     }
 
     async loginToken(email: string, token: string, forced: boolean = false, locked: boolean = false) {
-        if (this.LocoLogon) {
-            throw new Error('Already logon to loco');
-        }
+        if (this.LocoLogon) throw { status: WebApiStatusCode.OPERATION_DENIED, message: `Already logon to loco` } as LoginError;
 
         await super.loginToken(email, token, forced, locked);
         await this.locoLogin();
@@ -271,7 +267,7 @@ export class TalkClient extends TalkApiClient implements LocoClient {
         let res: MoreSettingsStruct = await this.Auth.requestMoreSettings(0);
 
         if (res.status !== WebApiStatusCode.SUCCESS) {
-            throw new Error(`more_settings.json ERR: ${res.status}`);
+            throw { status: WebApiStatusCode.OPERATION_DENIED, message: `more_settings.json request failed` } as LoginError;
         }
 
         let loginRes = await this.networkManager.locoLogin(this.Auth.DeviceUUID, accessData.userId, accessData.accessToken);
