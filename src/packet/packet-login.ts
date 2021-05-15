@@ -1,6 +1,6 @@
 import { KakaoAPI } from "../kakao-api";
 import { LocoBsonRequestPacket, LocoBsonResponsePacket } from "./loco-bson-packet";
-import { ChatDataStruct } from "../talk/struct/chatdata-struct";
+import { ChannelDataStruct } from "../talk/struct/channel-data-struct";
 import { JsonUtil } from "../util/json-util";
 import { Long } from "bson";
 import { Serializer } from "json-proxy-mapper";
@@ -18,13 +18,14 @@ export class PacketLoginReq extends LocoBsonRequestPacket {
         public OAuthToken: string = '',
         public Appver: string = KakaoAPI.InternalAppVersion,
         public Os: string = KakaoAPI.Agent,
+        public DeviceType: number = 2,
         public NetType: number = 0,
-        public NetworkMccMnc: string = '',
+        public NetworkMccMnc: string = '999',
         public Language: string = 'ko',
         public Revision: number = 0, //Always 0 since I didnt implement revision data and dunno what
         public RevisionData: null | Buffer = null, // idk
-        public ChatIds: Long[] = [],
-        public MaxIds: Long[] = [],
+        public ChannelIdList: Long[] = [],
+        public MaxIdList: Long[] = [],
         public LastTokenId: Long = Long.ZERO,
         public LastChatId: Long = Long.ZERO,
         public Lbk: number = 0, // ?
@@ -47,19 +48,19 @@ export class PacketLoginReq extends LocoBsonRequestPacket {
             'lang': this.Language,
             'duuid': this.DeviceUUID,
             'oauthToken': this.OAuthToken,
-            'dtype': 1,
+            'dtype': this.DeviceType,
             'ntype': this.NetType,
             'MCCMNC': this.NetworkMccMnc,
             'revision': this.Revision,
             'rp': null,
-            'chatIds': this.ChatIds,
-            'maxIds': this.MaxIds,
+            'chatIds': this.ChannelIdList,
+            'maxIds': this.MaxIdList,
             'lastTokenId': this.LastTokenId,
             'lbk': this.Lbk,
             'bg': this.Bg
         };
 
-        if (this.LastChatId.toNumber() !== 0) {
+        if (this.LastChatId !== Long.ZERO) {
             obj['lastChatId'] = this.LastChatId;
         }
 
@@ -75,7 +76,7 @@ export class PacketLoginRes extends LocoBsonResponsePacket {
         public Revision: number = 0,
         public OpenChatToken: number = 0,
         public RevisionDetail: string = '',
-        public ChatDataList: ChatDataStruct[] = []
+        public ChatDataList: ChannelDataStruct[] = []
     ) {
         super(status);
 
@@ -90,13 +91,13 @@ export class PacketLoginRes extends LocoBsonResponsePacket {
         this.Revision = body['revision'];
         this.RevisionDetail = body['revisionInfo'];
         this.OpenChatToken = body['ltk'];
+        
         this.ChatDataList = [];
-
         if (body['chatDatas']) {
             let chatDataList: any[] = body['chatDatas'];
 
             for (let rawChatData of chatDataList) {
-                this.ChatDataList.push(Serializer.deserialize<ChatDataStruct>(rawChatData, ChatDataStruct.MAPPER));
+                this.ChatDataList.push(Serializer.deserialize<ChannelDataStruct>(rawChatData, ChannelDataStruct.MAPPER));
             }
         }
     }

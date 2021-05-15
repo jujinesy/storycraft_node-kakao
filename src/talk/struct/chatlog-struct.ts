@@ -1,6 +1,5 @@
-import { StructBase, StructBaseOld } from "./struct-base";
+import { StructBase } from "./struct-base";
 import { ChatType } from "../chat/chat-type";
-import { JsonUtil } from "../../util/json-util";
 import { Long } from "bson";
 import { ObjectMapper } from "json-proxy-mapper";
 
@@ -9,6 +8,14 @@ import { ObjectMapper } from "json-proxy-mapper";
  *
  * Copyright (c) storycraft. Licensed under the MIT Licence.
  */
+
+export enum ChatRefererType {
+
+    UNKNOWN = 0,
+    KAKAOI = 1,
+    BOT = 2
+
+}
 
 export interface ChatlogStruct extends StructBase {
 
@@ -19,7 +26,9 @@ export interface ChatlogStruct extends StructBase {
     type: ChatType;
     text: string;
     sendTime: number;
-    rawAttachment: string;
+    referer?: ChatRefererType;
+    rawAttachment?: string;
+    supplement?: string;
     messageId: number;
 
 }
@@ -37,18 +46,11 @@ export namespace ChatlogStruct {
         sendTime: 'sendAt',
         rawAttachment: 'attachment',
         messageId: 'msgId',
+        referer: 'referer',
+        supplement: 'supplement'
 
     }
 
-    export const ConvertMap = {
-
-        logId: JsonUtil.LongConverter,
-        prevLogId: JsonUtil.LongConverter,
-        senderId: JsonUtil.LongConverter,
-        channelId: JsonUtil.LongConverter
-
-    }
-
-    export const MAPPER = new ObjectMapper(Mappings, ConvertMap);
+    export const MAPPER = new ObjectMapper(Mappings);
     
 }

@@ -36,7 +36,7 @@ export class KakaoAPI {
     }
 
     static get InternalAppSubVersion() {
-        return '2441';
+        return '2478';
     }
 
     static get OSVersion() {
@@ -440,8 +440,8 @@ export class KakaoAPI {
         return this.calculateFullXVCKey(aHeader, email, deviceUUID).substring(0, 16);
     }
 
-    static calculateFullXVCKey(aHeader: string, email: string, deviceUUID: string): string {
-        let res = `HEATH|${aHeader}|DEMIAN|${email}|${deviceUUID}`;
+    static calculateFullXVCKey(userAgent: string, email: string, deviceUUID: string): string {
+        let res = `HEATH|${userAgent}|DEMIAN|${email}|${deviceUUID}`;
 
         let hash = Crypto.createHash('sha512');
 
@@ -450,13 +450,16 @@ export class KakaoAPI {
         return hash.digest('hex');
     }
 
-
     static createSendTextURL(message: string) {
         return `kakaotalk://leverage?action=sendtext&message=${encodeURIComponent(message)}`;
     }
 
     static createJoinLinkURL(code: string, ref: string = 'EW') {
         return `kakaoopen://join?l=${code}&r=${ref}`;
+    }
+
+    static createSessionURL(token: string, redirectURL: string) {
+        return `https://accounts.kakao.com/weblogin/login_redirect?continue=${encodeURIComponent(redirectURL)}&token=${token}`;
     }
 }
 
