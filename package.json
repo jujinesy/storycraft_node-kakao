@@ -1,14 +1,15 @@
 {
   "name": "node-kakao",
-  "version": "4.0.0",
+  "version": "4.0.4",
   "description": "Loco protocol compatible library",
   "main": "./dist/index.js",
   "exports": {
-    "require": "./dist/index.js",
-    "import": "./dist_esm/index.js",
-    "default": "./dist_esm/index.js"
+    ".": {
+      "require": "./dist/index.js",
+      "import": "./dist_esm/index.js"
+    }
   },
-  "types": "dist/index.d.ts",
+  "types": "./dist/index.d.ts",
   "files": [
     "dist",
     "dist_esm",
@@ -18,9 +19,9 @@
   ],
   "scripts": {
     "test": "./node_modules/.bin/mocha -r ts-node/register ./tests/*.test.ts",
-    "locotest": "node --tls-min-v1.0 -r ts-node/register loco-test.ts",
+    "locotest": "node -r ts-node/register loco-test.ts",
     "build": "npm run build:node & npm run build:esm",
-    "build:node": "./node_modules/.bin/tsc",
+    "build:node": "./node_modules/.bin/tsc --outDir dist --declarationDir dist --declaration true",
     "build:esm": "./node_modules/.bin/rollup -c",
     "docs": "./node_modules/.bin/typedoc src",
     "prepublishOnly": "npm run test && npm run build"
@@ -40,7 +41,7 @@
   "devDependencies": {
     "@rollup/plugin-commonjs": "^17.0.0",
     "@rollup/plugin-node-resolve": "^11.1.0",
-    "@skypack/package-check": "^0.2.2",
+    "@rollup/plugin-typescript": "^8.2.0",
     "@types/bson": "^4.0.0",
     "@types/chai": "^4.2.3",
     "@types/lossless-json": "^1.0.0",
@@ -52,11 +53,9 @@
     "chai": "^4.2.0",
     "eslint": "^7.19.0",
     "eslint-config-google": "^0.14.0",
-    "eslint-config-prettier": "^7.2.0",
+    "eslint-config-prettier": "^8.0.0",
     "mocha": "^8.3.0",
     "rollup": "^2.38.1",
-    "rollup-plugin-node-polyfills": "^0.2.1",
-    "rollup-plugin-typescript2": "^0.30.0",
     "ts-node": "^8.10.2",
     "tslib": "^2.1.0",
     "typedoc": "^0.20.18",
