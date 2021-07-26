@@ -150,7 +150,7 @@ export class TalkOpenChannel
     return this._channelSession.forwardChat(chat, noSeen);
   }
 
-  deleteChat(chat: ChatLogged): Promise<{ success: boolean, status: number }> {
+  deleteChat(chat: ChatLogged): AsyncCommandResult {
     return this._channelSession.deleteChat(chat);
   }
 
@@ -335,8 +335,8 @@ export class TalkOpenChannel
   }
 
   // Called when broadcast packets are recevied.
-  pushReceived(method: string, data: DefaultRes, parentCtx: EventContext<TalkOpenChannelEvents>): void {
-    this._handler.pushReceived(method, data, parentCtx);
-    this._openHandler.pushReceived(method, data, parentCtx);
+  async pushReceived(method: string, data: DefaultRes, parentCtx: EventContext<TalkOpenChannelEvents>): Promise<void> {
+    await this._handler.pushReceived(method, data, parentCtx);
+    await this._openHandler.pushReceived(method, data, parentCtx);
   }
 }
